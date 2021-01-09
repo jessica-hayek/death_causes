@@ -1,0 +1,460 @@
+---
+title: "Why are we dying ?"
+author: "Group F"
+output:  
+  html_document:
+    code_folding: show
+
+    
+---
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1.Overview of worldwide mortality in 2016
+
+<br />
+
+**Loading all the libraries necessary:**
+```{r loadlib, echo=T, results='hide', message=F, warning=F}
+library(ggplot2)
+library(ggthemes)
+library(nlme)
+library(gganimate)
+library(gapminder)
+library(ggExtra)
+library(psych)
+library(reshape2)
+library(dplyr)
+library(nycflights13)
+library(ggcorrplot)
+library(waffle)
+library(tidyr)
+library(scales)
+library(ggalt)
+library(data.table)
+library(extrafont)
+library(lubridate)
+library(DT)
+library(grid)
+library(gridExtra)
+library(prettydoc)
+library(devtools)
+library(tidyverse)
+library(ggdark)
+library(here)
+library(png)
+library(gifski)
+library(forcats)
+library(tufte)
+library(colorspace)
+library(viridisLite)
+library(Zelig)
+library(formatR)
+library(DiagrammeR)
+library(xaringan)
+library(ggridges)
+library(GGally)
+library(readxl)
+library(purrr)
+library(RColorBrewer)
+library(ggpubr)
+library(knitr)
+library(kableExtra)
+```
+<br /><br />
+
+**Creating our main theme for the graphs:**
+```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+theme_mortality <- function(base_size = 16,
+                            base_family = "",
+                            base_line_size = base_size / 150,
+                            base_rect_size = base_size / 150){
+  theme_minimal(base_size = base_size, 
+                base_family = base_family,
+                base_line_size = base_line_size) %+replace%
+    theme(
+      plot.title = element_text(
+        color = rgb(204, 204, 204, maxColorValue = 255), 
+        face = "bold",
+        hjust = 0.6,
+        size = 6),
+      panel.border = element_blank(),
+      plot.background = element_rect(colour = "black", fill = "black"),
+      axis.title = element_text(
+        color = rgb(255, 255, 255, maxColorValue = 255),
+        size = rel(0.5)),
+      axis.text = element_text(
+        color = rgb(255, 255, 255, maxColorValue = 255),
+        size = rel(0.25)),
+      panel.grid.major = element_line(
+        rgb(25, 43, 253, maxColorValue = 255),
+        linetype = "blank"),   
+      panel.grid.minor = element_line(
+        rgb(105, 105, 105, maxColorValue = 255),
+        linetype = "blank", 
+        size = rel(4)),
+      legend.background = element_rect(fill = "black"),
+      legend.text	= element_text(size = 7, hjust = 0.5, color = rgb(204, 204, 204, maxColorValue = 255)),
+      legend.margin = margin(0,30,0,30, "cm"),
+      
+      complete = TRUE
+    )
+}
+```
+<br /><br />
+
+**Storing dataset that will be used for the graph and filtering for the year 2016:**
+```{r echo=TRUE}
+df_world_mortality <- read_excel('/Users/hicham/Documents/Classes/Term2/Dataviz/Lenny/viz1_excel.xlsx')
+df_world_mortality_2016 <- df_world_mortality[df_world_mortality$year==2016,]
+df_world_mortality_2016$country <- NULL
+df_world_mortality_2016$year <- NULL
+
+```
+<br /><br />
+
+**Plotting a histogram to find the main mortality causes in 2016:**
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.width= 10, fig.height= 6, fig.align = "center" }
+df_world_mortality_2016 <- gather(df_world_mortality_2016, mortality_cause, percentage, Cardiovascular:Terrorism , factor_key=TRUE)
+df_world_mortality_2016 <- as.data.frame(df_world_mortality_2016)
+
+df_world_mortality_2016 <- df_world_mortality_2016[order(df_world_mortality_2016$percentage, decreasing=T),]
+df_world_mortality_2016$mortality_cause <- factor(df_world_mortality_2016$mortality_cause, levels = df_world_mortality_2016$mortality_cause[order(df_world_mortality_2016$percentage)])
+
+ggplot(data=df_world_mortality_2016,
+       aes(x=mortality_cause, y=percentage))+
+  geom_bar(stat='identity',alpha=0.7, fill='ghostwhite', colour='ghostwhite' ) + theme_mortality() +
+  theme(legend.position='none') +
+  labs(y ="Percentage") + labs(x ="")+ coord_flip() + ggtitle('Worldwide Mortality Causes in 2016')+
+  theme(plot.title = element_text(size=7, colour='white', vjust = 3, hjust = 0.5, face='bold')) + theme(axis.text = element_text(
+        color = rgb(255, 255, 255, maxColorValue = 255),
+        size = rel(0.4)))
+```
+<br />
+
+**We can observe that cardiovascular and cancers amount to close to 50% of the deaths worldwide.**
+**We can also see that the 8 first worlwide killers are diseases, so we decide to look more into it to see if we would discover some patterns.**
+
+<br /><br />
+
+## 2.Highest causes of death per continent 
+<br />
+
+**Filtering for the year 2016:**
+```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+df_mortality <- as.data.frame(read_excel('/Users/hicham/Documents/Classes/Term2/Dataviz/Adrianna/global_mortality by continent.xlsx')) 
+
+df_mortality <- df_mortality[complete.cases(df_mortality), ]
+
+df_mortality_2016 <- df_mortality[df_mortality$year == 2016, ]
+
+df_mortality_2016[, "continent"] <- as.factor(df_mortality_2016[, "continent"])
+
+colnames(df_mortality_2016) <- gsub(" (%)", "", colnames(df_mortality_2016), fixed = T)
+
+df_mortality_2016 <- df_mortality_2016[, c(2, 5, 6, 8, 12, 18)]
+
+df_mortality_2016$sum <- rowSums(df_mortality_2016[, 2:ncol(df_mortality_2016)])
+
+for (i in seq(from=2, to=6, by=1)) {
+  for (j in 1:nrow(df_mortality_2016)) {
+    df_mortality_2016[j, i] <- (df_mortality_2016[j, i]*100)/df_mortality_2016[j, "sum"]
+  }
+}
+
+df_mortality_2016$sum <- NULL
+
+df_mortality_2016_continent <- aggregate(df_mortality_2016[, 2:ncol(df_mortality_2016)], FUN = mean, by = list(continent = df_mortality_2016$continent))
+
+asia <- df_mortality_2016_continent[df_mortality_2016_continent$continent == "Asia", 2:ncol(df_mortality_2016_continent)]
+africa <- df_mortality_2016_continent[df_mortality_2016_continent$continent == "Africa", 2:ncol(df_mortality_2016_continent)]
+europe <- df_mortality_2016_continent[df_mortality_2016_continent$continent == "Europe", 2:ncol(df_mortality_2016_continent)]
+n_america <- df_mortality_2016_continent[df_mortality_2016_continent$continent == "North America", 2:ncol(df_mortality_2016_continent)]
+oceania <- df_mortality_2016_continent[df_mortality_2016_continent$continent == "Oceania", 2:ncol(df_mortality_2016_continent)]
+s_america <- df_mortality_2016_continent[df_mortality_2016_continent$continent == "South America", 2:ncol(df_mortality_2016_continent)]
+
+smart.round <- function(x) {
+  y <- floor(x)
+  indices <- tail(order(x-y), round(sum(x) - sum(y)))
+  y[indices] <- y[indices] + 1
+  return(y)
+}
+
+asia <- smart.round(asia)
+africa <- smart.round(africa)
+europe <- smart.round(europe)
+n_america <- smart.round(n_america)
+oceania <- smart.round(oceania)
+s_america <- smart.round(s_america)
+
+
+```
+<br /><br />
+
+**Creating a specific theme for the waffle chart:**
+```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+theme_mortality1 <- function(base_size = 16,
+                            base_family = "",
+                            base_line_size = base_size / 150,
+                            base_rect_size = base_size / 150){
+  theme_minimal(base_size = base_size, 
+                base_family = base_family,
+                base_line_size = base_line_size) %+replace%
+    theme(
+      plot.title = element_text(
+        color = rgb(255, 255, 255, maxColorValue = 255), 
+        face = "plain",
+        hjust = 0, size = rel(0.4), vjust = 4),
+      legend.position = "none", 
+      legend.key.size = unit(0.15, "cm"),
+      legend.text = element_text(colour = "white", size = rel(0.4)),
+      legend.spacing.x = unit(0.1, "cm"),
+      legend.box.margin = margin(-15,-15,-15,-15),
+      panel.border = element_blank(),
+      plot.background = element_rect(fill = "black", colour = "black"),
+      plot.margin = margin(0.3,1,0.3,1,"cm"),
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      panel.grid.major = element_blank(),   
+      panel.grid.minor = element_blank(),
+      
+      complete = TRUE
+    )
+}
+```
+<br /><br />
+
+**Plotting the waffle chart to show the 5 biggest causes of death in the continents:**
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.height = 8, fig.width= 10, fig.align= "center"}
+iron(
+  waffle(
+    asia, rows = 5, size = 0.1, 
+    colors = c("#83ae9b", "#cbcba9", "#f9cdae", "#f69a9a", "#ef4566"), 
+    legend_pos = "none", keep = F, title = "Top 5 Causes of Death in Asia 2016"
+  ) + theme_mortality1(),
+  waffle(
+    africa, rows = 5, size = 0.1, 
+    colors = c("#83ae9b", "#cbcba9", "#f9cdae", "#f69a9a", "#ef4566"), 
+    legend_pos = "none", keep = F, title = "Top 5 Causes of Death in Africa 2016"
+  ) + theme_mortality1(),
+  waffle(
+    europe, rows = 5, size = 0.1, 
+    colors = c("#83ae9b", "#cbcba9", "#f9cdae", "#f69a9a", "#ef4566"), 
+    legend_pos = "none", keep = F, title = "Top 5 Causes of Death in Europe 2016"
+  ) + theme_mortality1(),
+  waffle(
+    n_america, rows = 5, size = 0.1, 
+    colors = c("#83ae9b", "#cbcba9", "#f9cdae", "#f69a9a", "#ef4566"), 
+    legend_pos = "none", keep = F, title = "Top 5 Causes of Death in North America 2016"
+  ) + theme_mortality1(),
+  waffle(
+    oceania, rows = 5, size = 0.1, 
+    colors = c("#83ae9b", "#cbcba9", "#f9cdae", "#f69a9a", "#ef4566"), 
+    legend_pos = "none", keep = F, title = "Top 5 Causes of Death in Oceania 2016"
+  ) + theme_mortality1(),
+  waffle(
+    s_america, rows = 5, size = 0.1, 
+    colors = c("#83ae9b", "#cbcba9", "#f9cdae", "#f69a9a", "#ef4566"), legend_pos = "bottom", 
+    keep = F, title = "Top 5 Causes of Death in South America 2016"
+  ) + theme_mortality1() + theme(legend.position = "bottom")
+)
+```
+<br />
+
+**We can see that, while cardiovascular diseases are the main cause of death all over the continents, it is the highest in Europe and the lowest in Africa.**
+**Africa has however more deaths caused by AIDS and Diarhea than all of the other continents united. **
+
+**We go deeper to try and find trends in the evolution of these diseases.**
+
+<br /><br />
+
+## 3.Evolution of deaths by these diseases from 1990 to 2010 around the world
+<br />
+
+
+**Importing the resources for this graph:**
+```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+df_mortality <- read_excel('/Users/hicham/Documents/Classes/Term2/Dataviz/Adrianna/global_mortality by continent.xlsx')
+
+df_mortality <- df_mortality %>%
+  mutate_at(1:3, as.factor)
+
+df_mortality <- df_mortality %>%
+  filter(continent != "NA")
+
+df_mortality_per_continent <- df_mortality %>% 
+  group_by(continent, year) %>%
+  summarize(Cardiovascular = mean(Cardiovascular), Cancers = mean(Cancers), Diarrheal = mean(Diarrheal), HIV_AIDS = mean(HIV_AIDS), Diabetes = mean(Diabetes))
+
+```
+<br /><br />
+
+**Plotting the graph that will show us the evolution the deaths caused by Cancer, HIV, Diabetes, Cardiovascular and Diarrheal diseases: **
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.width= 10, fig.height= 6, fig.align = "center" }
+g5 <- ggplot() +
+  geom_line(data = df_mortality, aes(x = year, y = Cardiovascular, group = country,color = continent), alpha = 0.14) +
+  scale_color_manual(values = c("#3CB371","#FFE338","#0094f0","#4CDFD2","#9B64C0","#E27429")) + 
+  theme_mortality() + 
+  geom_line(data = df_mortality_per_continent, aes(x = year, y = Cardiovascular, group = continent,color = continent), lwd = 1) +
+  scale_color_manual(values = c("#3CB371","#FFE338","#0094f0","#4CDFD2","#9B64C0","#E27429")) + 
+  theme(legend.position='none') +
+  labs(title = "CARDIOVASCULAR", y = "")
+
+g4 <- ggplot() +
+  geom_line(data = df_mortality, aes(x = year, y = Cancers, group = country,color = continent), alpha = 0.14) +
+  scale_color_manual(values = c("#3CB371","#FFE338","#0094f0","#4CDFD2","#9B64C0","#E27429")) + 
+  theme_mortality() + 
+  geom_line(data = df_mortality_per_continent, aes(x = year, y = Cancers, group = continent,color = continent), lwd = 1) +
+  scale_color_manual(values = c("#3CB371","#FFE338","#0094f0","#4CDFD2","#9B64C0","#E27429")) + 
+  theme(legend.position='none') + 
+  labs(title = "CANCERS", y = "")
+
+g3 <- ggplot() +
+  geom_line(data = df_mortality, aes(x = year, y = Diarrheal, group = country,color = continent), alpha = 0.14) +
+  scale_color_manual(values = c("#3CB371","#FFE338","#0094f0","#4CDFD2","#9B64C0","#E27429")) + 
+  theme_mortality() + 
+  geom_line(data = df_mortality_per_continent, aes(x = year, y = Diarrheal, group = continent,color = continent), lwd = 1) +
+  scale_color_manual(values = c("#3CB371","#FFE338","#0094f0","#4CDFD2","#9B64C0","#E27429")) + 
+  theme(legend.position='none') +
+  labs(title = "DIARRHEAL", y = "")
+
+g2 <- ggplot() +
+  geom_line(data = df_mortality, aes(x = year, y = HIV_AIDS, group = country,color = continent), alpha = 0.14) +
+  scale_color_manual(values = c("#3CB371","#FFE338","#0094f0","#4CDFD2","#9B64C0","#E27429")) + 
+  theme_mortality() + 
+  geom_line(data = df_mortality_per_continent, aes(x = year, y = HIV_AIDS, group = continent,color = continent), lwd = 1) +
+  scale_color_manual(values = c("#3CB371","#FFE338","#0094f0","#4CDFD2","#9B64C0","#E27429")) + 
+  theme(legend.position='none') +
+  labs(title = "HIV_AIDS", y = "")
+
+g1 <- ggplot() +
+  geom_line(data = df_mortality, aes(x = year, y = Diabetes, group = country,color = continent), alpha = 0.14) +
+  scale_color_manual(values = c("#3CB371","#FFE338","#0094f0","#4CDFD2","#9B64C0","#E27429")) + 
+  theme_mortality() + 
+  geom_line(data = df_mortality_per_continent, aes(x = year, y = Diabetes, group = continent,color = continent), lwd = 1) +
+  scale_color_manual(values = c("#3CB371","#FFE338","#0094f0","#4CDFD2","#9B64C0","#E27429")) + 
+  theme(legend.position='none') +
+  labs(title = "DIABETES", y = "")
+
+
+ggarrange(g1,g2,g4,g3,g5, nrow = 1, common.legend = TRUE, legend = "bottom")
+```
+<br />
+
+**Deaths caused by Cancer and Diabetes have risen during between 1990 and 2016.**
+**Diabetes can be explained by the rise of consumption of sugar all over the world through industrial food and globalization.**
+**One explanation for cancer is that the global life expectancy has risen and cancer usually touches older people.**
+
+**On the other side, deaths caused by Diarrheal diseases and HIV have dropped all over the world.**
+**Diarrheal, thanks to modern medicine that makes them not fatal.**
+**HIV, because people all over the world are more informed about it and how to protect from it, but also because now there are treatments to allow people to stay alive while having AIDS.**
+
+**Cardiovascular diseases seem to be stabilizing even thoug growing a bit in Asia and Africa.**
+
+**Finally, let's go even deeper to try to see what is happening in specific countries.**
+
+<br /><br />
+
+
+## 4.Analyzing death rate by specific diseases around countries
+
+<br />
+**Importing and filtering the datset:**
+```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+df_mortality <- read_excel('/Users/hicham/Documents/Classes/Term2/Dataviz/Adrianna/global_mortality by continent.xlsx')
+df_mortality <- df_mortality %>%
+  mutate_at(1:3, as.factor)
+
+df_mortality <- df_mortality %>%
+  filter(continent != "NA")
+
+
+africa <- dplyr::filter(df_mortality, continent == "Africa")
+europe <- dplyr::filter(df_mortality, continent == "Europe")
+asia <- dplyr::filter(df_mortality, continent == "Asia")
+NorthAmerica <- dplyr::filter(df_mortality, continent == "North America")
+SouthAmerica <- dplyr::filter(df_mortality, continent == "South America")
+Oceania <- dplyr::filter(df_mortality, continent == "Oceania")
+```
+<br /><br />
+
+**Plotting the evolution of deaths by cardiovascular diseases in Europe**
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.width= 10, fig.height= 6, fig.align = "center" }
+ggplot(europe, aes(x = year, y = Cardiovascular)) +
+  geom_line(color="#83AE9B") +
+  facet_wrap(~country, scales = "free_x") +
+  theme_mortality() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), strip.text.x = element_text(color = "white", size = 7))
+
+```
+<br />
+
+**Europe is the only continent dropping their mortality rate in cardiovascular diseases.** 
+**Northern countries such as Denmark, Netherlands & Norway are leading the decrease, while we see there are outliers such as Azerbaijan, Albania & Belarus which are still under the increasing tendency.**
+
+<br /><br />
+
+**Plotting the evolution of deaths by AIDS in ASIA**
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.width= 10, fig.height= 6, fig.align = "center" }
+ggplot(asia, aes(year, HIV_AIDS)) +
+  geom_line(color="#EF4566") +
+  facet_wrap(~country, scales = "free_x") +
+  theme_mortality() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), strip.text.x = element_text(color = "white", size = 7))
+```
+<br />
+
+**Although in general, Asia is not a high runner in AIDS mortality, we identified Thailand and Cambodia had a pick death rate in 2004, despite the war on drugs, the Thai government had put in place on those years.**
+
+
+<br /><br />
+
+**Plotting the evolution of deaths by AIDS in North America**
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.width= 10, fig.height= 6, fig.align = "center" }
+ggplot(NorthAmerica, aes(year, HIV_AIDS)) +
+  geom_line(color="#EF4566") +
+  facet_wrap(~country, scales = "free_x") +
+  theme_mortality() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), strip.text.x = element_text(color = "white", size = 7))
+```
+<br />
+
+**Bahamas, Haiti and Dominican Republic, stand out in the North American continent as countries where special attention need to be placed around HIV. **
+**With a pick mortality rate in 2005, governments have worked hard to reduce the increasing trend seen in previous years. **
+**Leading the improvement is Bahamas where the mortality has almost dropped to zero.**
+
+
+<br /><br />
+
+**Plotting the evolution of deaths by Diarrheal diseases in Oceania**
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.width= 10, fig.height= 6, fig.align = "center" }
+ggplot(Oceania, aes(year, Diarrheal)) +
+  geom_line(color="#F69A9A") +
+  facet_wrap(~country, scales = "free_x") +
+  theme_mortality() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), strip.text.x = element_text(color = "white", size = 7))
+```
+<br />
+
+**Over the past years, we have seen a significant decrease in diarrheal mortality, in Oceania the leading drop can be seen in Kiribati which has dropped in more than 50% their rate, followed by Papua New Guinea, which has also being doing a good job reducing their mortality.**
+
+<br /><br />
+
+## 5.Three main trends discovered
+<br />
+
+**1.Richest countries tend to have more deaths caused by Cancer and Diabetes while poorer countries tend to have a bigger death rate with AIDS and Diarrheal diseases.**
+
+<br /><br />
+
+**2.Overall, Diarrheal diseases killing people is almost a thing of the past as it has plummeted all over the world, and this trend is similar to the AIDS one, thanks to the discovery of new treatments that allow survival of patients who contracted it**
+
+<br /><br />
+
+**3.The Cardiovascular trend shows a pattern of decreasing in Europe, which is probably due to a richer more educated population that tends to be healthier**
+
